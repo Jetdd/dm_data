@@ -35,11 +35,11 @@ def _fetch_names(w, codes: list[str], batch_size: int) -> pd.DataFrame:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Fetch Wind A-share hot concepts into dm_intraday mapping parquet.")
+    parser = argparse.ArgumentParser(description="Fetch Wind A-share hot concepts into dm_data mapping parquet.")
     parser.add_argument("--date", default=pd.Timestamp.today().date().isoformat(), help="Sector constituent date, e.g. 2026-05-22")
     parser.add_argument("--trade-date", help="Wind wss hotconcept tradeDate. Defaults to --date.")
     parser.add_argument("--sector-id", default=DEFAULT_SECTOR_ID, help="Wind sector id for all A shares.")
-    parser.add_argument("--root", default=None, help="dm_intraday root, default uses E:\\dm_intraday or DM_INTRADAY_ROOT")
+    parser.add_argument("--root", default=None, help="dm_data root, default uses E:\\dm_intraday or DM_INTRADAY_ROOT")
     parser.add_argument("--batch-size", type=int, default=3500, help="WSS code batch size.")
     args = parser.parse_args()
 
