@@ -133,6 +133,80 @@ def _filter_datetime(
     return df.loc[mask].copy()
 
 
+def _datetime_series(df: pd.DataFrame, datetime_col: str | None = None) -> pd.Series:
+    col = datetime_col or _detect_datetime_column(df.columns)
+    if col is None:
+        raise ValueError("Cannot detect datetime/date column.")
+    return pd.to_datetime(df[col], errors="coerce")
+
+
+def _request_bounds(
+    start_date: str | pd.Timestamp | None,
+    end_date: str | pd.Timestamp | None,
+) -> tuple[pd.Timestamp | None, pd.Timestamp | None]:
+    start = pd.to_datetime(start_date) if start_date is not None else None
+    end = pd.to_datetime(end_date) if end_date is not None else None
+    if end is not None and end.time() == pd.Timestamp(end.date()).time():
+        end = end + pd.Timedelta(days=1) - pd.Timedelta(nanoseconds=1)
+    return start, end
+
+
+def _date_ranges_to_fetch(
+    df: pd.DataFrame,
+    *,
+    start_date: str | pd.Timestamp | None,
+    end_date: str | pd.Timestamp | None,
+    datetime_col: str | None,
+) -> list[tuple[pd.Timestamp, pd.Timestamp]]:
+    req_start, req_end = _request_bounds(start_date, end_date)
+    if req_start is None or req_end is None:
+        return []
+    if df.empty:
+        return [(req_start, req_end)]
+
+    values = _datetime_series(df, datetime_col=datetime_col).dropna()
+    if values.empty:
+        return [(req_start, req_end)]
+
+    requested_days = pd.date_range(req_start.normalize(), req_end.normalize(), freq="D")
+    local_days = set(values.dt.normalize().dropna().unique())
+    missing_days = [day for day in requested_days if day not in local_days]
+    if not missing_days:
+        return []
+
+    ranges: list[tuple[pd.Timestamp, pd.Timestamp]] = []
+    range_start = missing_days[0]
+    previous = missing_days[0]
+    for day in missing_days[1:]:
+        if day == previous + pd.Timedelta(days=1):
+            previous = day
+            continue
+        ranges.append((max(range_start, req_start), min(_end_of_day(previous), req_end)))
+        range_start = previous = day
+    ranges.append((max(range_start, req_start), min(_end_of_day(previous), req_end)))
+    return ranges
+
+
+def _end_of_day(day: pd.Timestamp) -> pd.Timestamp:
+    return day.normalize() + pd.Timedelta(days=1) - pd.Timedelta(nanoseconds=1)
+
+
+def _dedupe_sort(df: pd.DataFrame, datetime_col: str | None = None) -> pd.DataFrame:
+    if df.empty:
+        return df
+    col = datetime_col or _detect_datetime_column(df.columns)
+    keys = [key for key in ["security_id", "kline_type", col] if key and key in df.columns]
+    if keys:
+        df = df.drop_duplicates(keys, keep="last")
+    else:
+        df = df.drop_duplicates(keep="last")
+    if col and col in df.columns:
+        df = df.assign(_dm_sort_time=pd.to_datetime(df[col], errors="coerce"))
+        sort_cols = [c for c in ["security_id", "_dm_sort_time"] if c in df.columns]
+        df = df.sort_values(sort_cols).drop(columns=["_dm_sort_time"])
+    return df.reset_index(drop=True)
+
+
 def _format_dm_datetime(value: str | pd.Timestamp) -> str:
     ts = pd.to_datetime(value)
     if ts.time() == pd.Timestamp(ts.date()).time():
@@ -237,14 +311,45 @@ def _read_or_fetch(
     security_category: str | int | None,
     data_source_list: Sequence[int] | None,
     timeout: int | float,
+    datetime_col: str | None,
 ) -> pd.DataFrame:
+    if missing not in {"fetch", "raise", "empty"}:
+        raise ValueError("missing must be 'fetch', 'raise', or 'empty'")
+
     if path.exists():
-        return pd.read_parquet(path)
+        local = pd.read_parquet(path)
+        if missing != "fetch":
+            return local
+        ranges = _date_ranges_to_fetch(
+            local,
+            start_date=start_date,
+            end_date=end_date,
+            datetime_col=datetime_col,
+        )
+        if not ranges:
+            return local
+
+        fetched_frames = [
+            _fetch_remote_price(
+                asset=asset,
+                code=code,
+                frequency=frequency,
+                start_date=fetch_start,
+                end_date=fetch_end,
+                security_category=security_category,
+                data_source_list=data_source_list,
+                timeout=timeout,
+            )
+            for fetch_start, fetch_end in ranges
+        ]
+        merged = _dedupe_sort(pd.concat([local, *fetched_frames], ignore_index=True), datetime_col=datetime_col)
+        if saved:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            merged.to_parquet(path, index=False)
+        return merged
 
     if missing == "empty":
         return pd.DataFrame()
-    if missing not in {"fetch", "raise"}:
-        raise ValueError("missing must be 'fetch', 'raise', or 'empty'")
     if missing == "raise":
         raise DataNotFoundError(f"No local data file: {path}")
 
@@ -258,6 +363,7 @@ def _read_or_fetch(
         data_source_list=data_source_list,
         timeout=timeout,
     )
+    df = _dedupe_sort(df, datetime_col=datetime_col)
     if saved:
         path.parent.mkdir(parents=True, exist_ok=True)
         df.to_parquet(path, index=False)
@@ -305,6 +411,7 @@ def get_price(
         security_category=security_category,
         data_source_list=data_source_list,
         timeout=timeout,
+        datetime_col=datetime_col,
     )
     df = _filter_datetime(df, start_date=start_date, end_date=end_date, datetime_col=datetime_col)
 
