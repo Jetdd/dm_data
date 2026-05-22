@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dm-data"
+version = "0.1.0"
+description = "Local reader API for DM data and mappings"
+requires-python = ">=3.9"
+dependencies = [
+    "pandas>=1.5",
+    "pyarrow>=10",
+    "duckdb>=0.9",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
