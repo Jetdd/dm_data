@@ -13,6 +13,7 @@ FrameType = Literal["pandas", "polars", "path"]
 DEFAULT_ROOT = Path(r"E:\dm_intraday")
 VALID_ASSETS = {"bond", "stock"}
 VALID_FREQUENCIES = {"1m", "5m", "15m", "30m", "60m"}
+KLINE_TYPES = {"1m": 1, "5m": 2, "15m": 3, "30m": 4, "60m": 5}
 _ROOT = Path(os.getenv("DM_INTRADAY_ROOT", str(DEFAULT_ROOT)))
 
 
@@ -22,6 +23,10 @@ class DataNotFoundError(FileNotFoundError):
 
 class FrequencyError(ValueError):
     """Raised when frequency is not one of the supported DM intraday frequencies."""
+
+
+class RemoteFetchError(RuntimeError):
+    """Raised when local data is missing and DM remote fetch cannot be completed."""
 
 
 def get_root() -> Path:
@@ -128,6 +133,137 @@ def _filter_datetime(
     return df.loc[mask].copy()
 
 
+def _format_dm_datetime(value: str | pd.Timestamp) -> str:
+    ts = pd.to_datetime(value)
+    if ts.time() == pd.Timestamp(ts.date()).time():
+        return ts.date().isoformat()
+    return ts.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _infer_stock_category(code: str) -> str:
+    suffix = code.upper().split(".")[-1] if "." in code else ""
+    prefix = code.split(".")[0]
+    if suffix in {"SH", "SZ"} and (prefix.startswith(("5", "15", "16", "18"))):
+        return "2"
+    if suffix in {"SH", "SZ"} and (prefix.startswith(("0", "3", "6", "8", "9"))):
+        return "1"
+    return "1"
+
+
+def _remote_payload(
+    *,
+    asset: str,
+    code: str,
+    frequency: str,
+    start_date: str | pd.Timestamp,
+    end_date: str | pd.Timestamp,
+    security_category: str | int | None,
+    data_source_list: Sequence[int] | None,
+) -> tuple[str, dict[str, object]]:
+    kline_type = KLINE_TYPES[frequency]
+    if asset == "stock":
+        return (
+            "/dm-quant-func-service/api/v1/equity/market-data/bars",
+            {
+                "security_id_list": [code],
+                "security_category": str(security_category or _infer_stock_category(code)),
+                "kline_type": kline_type,
+                "start_datetime": _format_dm_datetime(start_date),
+                "end_datetime": _format_dm_datetime(end_date),
+            },
+        )
+    if asset == "bond":
+        return (
+            "/dm-quant-func-service/api/v1/bond/market-data/bars",
+            {
+                "security_id_list": [code],
+                "data_source_list": list(data_source_list or [1]),
+                "kline_type": kline_type,
+                "start_datetime": _format_dm_datetime(start_date),
+                "end_datetime": _format_dm_datetime(end_date),
+            },
+        )
+    raise ValueError(f"Unsupported asset for remote fetch: {asset}")
+
+
+def _fetch_remote_price(
+    *,
+    asset: str,
+    code: str,
+    frequency: str,
+    start_date: str | pd.Timestamp | None,
+    end_date: str | pd.Timestamp | None,
+    security_category: str | int | None,
+    data_source_list: Sequence[int] | None,
+    timeout: int | float,
+) -> pd.DataFrame:
+    if start_date is None or end_date is None:
+        raise RemoteFetchError("start_date and end_date are required when fetching missing data from DM.")
+
+    try:
+        from dm_quant_api_client import DMQuantApiClient
+    except ImportError as exc:
+        raise RemoteFetchError("dm_quant_api_client is required to fetch missing data from DM.") from exc
+
+    api_path, payload = _remote_payload(
+        asset=asset,
+        code=code,
+        frequency=frequency,
+        start_date=start_date,
+        end_date=end_date,
+        security_category=security_category,
+        data_source_list=data_source_list,
+    )
+    client = DMQuantApiClient(pythonic=True, timeout=timeout)
+    try:
+        df = client.post_data(data=payload, api_path=api_path)
+    finally:
+        client.close()
+    if not isinstance(df, pd.DataFrame):
+        df = pd.DataFrame(df)
+    return df
+
+
+def _read_or_fetch(
+    *,
+    path: Path,
+    asset: str,
+    code: str,
+    frequency: str,
+    start_date: str | pd.Timestamp | None,
+    end_date: str | pd.Timestamp | None,
+    saved: bool,
+    missing: Literal["raise", "empty", "fetch"],
+    security_category: str | int | None,
+    data_source_list: Sequence[int] | None,
+    timeout: int | float,
+) -> pd.DataFrame:
+    if path.exists():
+        return pd.read_parquet(path)
+
+    if missing == "empty":
+        return pd.DataFrame()
+    if missing not in {"fetch", "raise"}:
+        raise ValueError("missing must be 'fetch', 'raise', or 'empty'")
+    if missing == "raise":
+        raise DataNotFoundError(f"No local data file: {path}")
+
+    df = _fetch_remote_price(
+        asset=asset,
+        code=code,
+        frequency=frequency,
+        start_date=start_date,
+        end_date=end_date,
+        security_category=security_category,
+        data_source_list=data_source_list,
+        timeout=timeout,
+    )
+    if saved:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        df.to_parquet(path, index=False)
+    return df
+
+
 def get_price(
     *,
     asset: str,
@@ -139,23 +275,37 @@ def get_price(
     root: str | os.PathLike[str] | None = None,
     frame_type: FrameType = "pandas",
     datetime_col: str | None = None,
-    missing: Literal["raise", "empty"] = "raise",
+    missing: Literal["fetch", "raise", "empty"] = "fetch",
+    saved: bool = True,
+    security_category: str | int | None = None,
+    data_source_list: Sequence[int] | None = None,
+    timeout: int | float = 30,
 ) -> pd.DataFrame | object | Path:
-    """Read one symbol's local intraday bars.
+    """Read one symbol's local intraday bars, fetching from DM if missing.
 
     Parameters mirror a compact RiceQuant-style call:
     `asset`, `code`, `frequency`, `start_date`, `end_date`.
     """
+    asset = _normalize_asset(asset)
+    frequency = _normalize_frequency(frequency)
+    code = _normalize_code(code)
     path = parquet_path(asset=asset, code=code, frequency=frequency, root=root)
     if frame_type == "path":
         return path
 
-    if not path.exists():
-        if missing == "empty":
-            return pd.DataFrame()
-        raise DataNotFoundError(f"No local data file: {path}")
-
-    df = pd.read_parquet(path)
+    df = _read_or_fetch(
+        path=path,
+        asset=asset,
+        code=code,
+        frequency=frequency,
+        start_date=start_date,
+        end_date=end_date,
+        saved=saved,
+        missing=missing,
+        security_category=security_category,
+        data_source_list=data_source_list,
+        timeout=timeout,
+    )
     df = _filter_datetime(df, start_date=start_date, end_date=end_date, datetime_col=datetime_col)
 
     if fields is not None:
