@@ -10,11 +10,15 @@ import pandas as pd
 Asset = Literal["bond", "stock"]
 FrameType = Literal["pandas", "polars", "path"]
 
-DEFAULT_ROOT = Path(r"E:\dm_intraday")
 VALID_ASSETS = {"bond", "stock"}
 VALID_FREQUENCIES = {"1m", "5m", "15m", "30m", "60m", "1d", "1w", "1mo"}
 KLINE_TYPES = {"1m": 1, "5m": 2, "15m": 3, "30m": 4, "60m": 5, "1d": 6, "1w": 7, "1mo": 8}
-_ROOT = Path(os.getenv("DM_INTRADAY_ROOT", str(DEFAULT_ROOT)))
+
+
+def _root() -> Path:
+    from .config import get_config
+
+    return get_config().dm_intraday_root
 
 
 class DataNotFoundError(FileNotFoundError):
@@ -30,14 +34,16 @@ class RemoteFetchError(RuntimeError):
 
 
 def get_root() -> Path:
-    return _ROOT
+    return _root()
 
 
 def set_root(root: str | os.PathLike[str]) -> Path:
     """Set the process-local data root and return it."""
-    global _ROOT
-    _ROOT = Path(root)
-    return _ROOT
+    from .config import get_config
+
+    cfg = get_config()
+    cfg.dm_intraday_root = Path(root)
+    return cfg.dm_intraday_root
 
 
 def _normalize_asset(asset: str) -> str:
@@ -89,7 +95,7 @@ def parquet_path(
     root: str | os.PathLike[str] | None = None,
 ) -> Path:
     """Return the expected per-symbol parquet path."""
-    base = Path(root) if root is not None else _ROOT
+    base = Path(root) if root is not None else _root()
     asset = _normalize_asset(asset)
     frequency = _normalize_frequency(frequency)
     code = _normalize_code(code)
