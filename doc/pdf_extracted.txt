@@ -1,0 +1,3482 @@
+--- Page 1 ---
+DM PythonAPI 数据调用
+用户手册
+V1.3
+
+
+--- Page 2 ---
+目录
+一、变更记录.................................................................................................................................... 3
+二、DM Python SDK 安装与参数说明..........................................................................................3
+1. SDK 简介...............................................................................................................................3
+2. 安装说明................................................................................................................................4
+3. 快速开始................................................................................................................................4
+4. 初始化参数说明...................................................................................................................5
+5. 调用参数说明........................................................................................................................6
+6. 参数风格说明........................................................................................................................7
+7. 总结说明................................................................................................................................8
+三、DM 函数列表............................................................................................................................. 8
+1. 债券-高频序列.......................................................................................................................8
+2. 债券-日期序列.................................................................................................................... 11
+3. 债券-实时最新行情（仅当天）........................................................................................ 19
+4. 债券-机构行为................................................................................................................... 24
+5. 债券-基础资料.................................................................................................................... 26
+6. 债券-收益率曲线函数........................................................................................................ 29
+7. 债券-发行人维度存续债调取............................................................................................ 36
+8. 债券-活跃券/次活跃券....................................................................................................... 38
+9. 货币市场-日期序列............................................................................................................ 40
+10. 货币市场-资金情绪指数..................................................................................................43
+11. 期货-高频序列.................................................................................................................. 45
+12. 期货-日期序列衍生.......................................................................................................... 48
+13. 期货-成交持仓排名.......................................................................................................... 50
+14. 权益-高频序列.................................................................................................................. 52
+15. EDB-指标ID 获取............................................................................................................ 55
+16. EDB-指标数值调取..........................................................................................................57
+17. 交易日历............................................................................................................................58
+四、常见问题与注意事项.............................................................................................................. 60
+1. 初始化时报`app_key is required`...................................................................................60
+2. 初始化时报`sm4_key is required`..................................................................................60
+3. 请求返回HTTP 非200..................................................................................................... 60
+4. 返回结果无法解密或不是合法JSON..............................................................................61
+5. 返回`DataFrame` 转换失败.............................................................................................61
+6. 返回“无订阅套餐”...............................................................................................................61
+7. 返回“额度已耗尽”/”限流“等提示.......................................................................................61
+
+
+--- Page 3 ---
+一、变更记录
+版本
+更新时间
+更新说明
+V1.0
+2026-03-31
+出版发布
+V1.1
+2026-04-17
+1、函数新增：EDB 宏观数据、中
+债、中证收益率曲线；
+2、指标新增：债券-日期序列新增上
+清所估值指标；
+V1.2
+2026-05-18
+1、函数新增：权益高频序列函数
+V1.3
+2026-05-21
+1、函数新增：活跃券/次活跃券函
+数、交易日历函数
+2、函数入参新增：货币市场-日期序
+列函数新增品种代码入参
+二、DM Python SDK 安装与参数说明
+1. SDK 简介
+•
+本SDK 的Python 包名为dm_quant_api_client，用于调用需要SM4 加密的量化
+API 接口。
+•
+SDK 当前具备以下能力：
+￮
+自动完成请求报文的SM4 加密和响应解密
+￮
+统一封装HTTP 请求头、超时、证书校验等通用逻辑
+￮
+支持将接口返回结果默认转换为pandas.DataFrame
+￮
+支持请求参数和响应字段在驼峰命名与下划线命名之间自动转换
+
+
+--- Page 4 ---
+•
+运行环境要求：
+￮
+Python 3.8 及以上
+•
+依赖包：
+￮
+requests>=2.25.0
+￮
+pandas>=1.0.0
+￮
+gmssl>=3.2.0
+2. 安装说明
+可通过链接下载python 包，链接：http://dm-download.oss-cn-
+shanghai.aliyuncs.com/dm_api_client/python/0.2.2/dm_quant_api_client-0.2.2-py3-
+none-any.whl
+指定本地文件路径安装python 包：pip install /your_path/dm_quant_api_client-0.2.2-
+py3-none-any.whl
+3. 快速开始
+3.1 最小示例
+Python
+from dm_quant_api_client import DMQuantApiClient
+client = DMQuantApiClient(
+app_key="YOUR_APP_KEY",
+sm4_key="YOUR_SM4_KEY",
+pythonic=True,
+)
+result = client.post_data(
+data={
+"security_id_list": ["500426.SZ", "500427.SZ"],
+},
+api_path="/dm-quant-func-service/api/v1/bond/basic-info/info",
+
+
+--- Page 5 ---
+)
+print(result)
+说明：
+•
+使用参数，pythonic=True ，post_data(...) 默认返回pandas.DataFrame
+3.2 使用环境变量
+如果不希望在代码中明文传入密钥，可以先设置环境变量。
+Windows PowerShell：
+PowerShell
+$env:INNO_APP_KEY="YOUR_APP_KEY"
+$env:INNO_SM4_KEY="YOUR_SM4_KEY"
+Linux / macOS：
+Bash
+export INNO_APP_KEY="YOUR_APP_KEY"
+export INNO_SM4_KEY="YOUR_SM4_KEY"
+之后可直接初始化：
+Python
+from dm_quant_api_client import DMQuantApiClient
+client = DMQuantApiClient()
+4. 初始化参数说明
+DMQuantApiClient 的初始化签名如下：
+
+
+--- Page 6 ---
+Python
+DMQuantApiClient(
+app_key=None,
+sm4_key=None,
+pythonic=False,
+)
+各参数说明如下
+参数名
+是否必
+填
+默认
+值
+说明
+推荐用法
+app_key
+是
+None
+接口访问身份标识。若不
+传，SDK 会尝试读取环境
+变量INNO_APP_KEY。
+建议显式传入，或统
+一配置到环境变量
+中。
+sm4_key
+是
+None
+SM4 加密密钥。若不传，
+SDK 会尝试读取环境变量
+INNO_SM4_KEY。
+建议显式传入，或统
+一配置到环境变量
+中。
+pythonic
+否
+False
+Python 友好模式。开启后
+会自动将请求字段转为驼
+峰、响应字段转为下划
+线。
+如果客户代码主要使
+用python 风格
+(snake_case) 命名，
+建议开启。
+必填项说明：
+•
+app_key 和sm4_key 至少需要通过“显式传参”或“环境变量”中的一种方式提供
+•
+如果两者都未提供，初始化时会直接抛出ValueError
+5. 调用参数说明
+当前数据接口统一调用方法如下：
+Python
+post_data(data, api_path)
+
+
+--- Page 7 ---
+参数说明：
+参数名
+是否必填
+默认值
+说明
+data
+是
+无
+请求参数字典。SDK 会先按配置进行字段名转
+换，再做SM4 加密。
+api_path
+是
+无
+接口路径，例如/dm-quant-func-
+service/api/v1/bond/basic-info/info。
+返回规则：
+•
+默认返回pandas.DataFrame
+•
+关于DataFrame 转换逻辑，SDK 当前支持以下常见返回形态：
+￮
+列表套字典，例如[{"col1": 1}, {"col1": 2}]
+￮
+{"data": [...], "columns": [...]} 结构
+￮
+普通字典，此时会转换为单行DataFrame
+6. 参数风格说明
+SDK 支持对请求和响应字段名进行统一转换。
+6.1 推荐使用方式
+如果客户希望在Python 代码中统一使用下划线命名，建议开启pythonic=True：
+Python
+client = DMQuantApiClient(
+app_key="YOUR_APP_KEY",
+sm4_key="YOUR_SM4_KEY",
+pythonic=True
+)
+
+
+--- Page 8 ---
+开启后实际效果为：
+•
+请求参数中的python 风格(snake_case) 字段会自动转换为接口常用的驼峰风格
+(camelCase)
+•
+返回结果中的驼峰风格(camelCase) 字段会自动转换为python 风格(snake_case)
+如果客户侧代码本身就是按接口文档中的驼峰字段编写，可不使用pythonic 参数，此
+时请求字段和返回字段都不会被自动修改。
+Python
+client = DMQuantApiClient(
+app_key="YOUR_APP_KEY",
+sm4_key="YOUR_SM4_KEY",
+)
+7. 总结说明
+成功配置使用DM-PythonAPI，可总结为以下三步：
+•
+Step1：获取DM 最新版的client、app_key 和sm4_key、最新版用户手册（这
+些信息可联系您的DM 客户经理获取）。
+•
+Step2：按照安装指引进行client 安装和key 的配置；
+•
+Step3：按照DM 函数的path 以及入参条件配置，即可成功调用该函数对应的数
+据内容。
+三、DM 函数列表
+1. 债券-高频序列
+1.1 函数信息
+•
+函数说明：获取指定债券或债券列表的经纪商成交行情K 线数据（包含起始日开
+始的，分钟线、日线、周线和月线）。
+•
+函数path：/dm-quant-func-service/api/v1/bond/market-data/bars
+
+
+--- Page 9 ---
+•
+数据更新频率：实时更新
+1.2 入参指标
+参数
+类型
+是否必
+填
+说明
+security_id_l
+ist
+str or str
+list
+是
+债券代码。
+支持列表传入，单次最多5 个。格式样例：
+"2500006.IB"
+data_source
+_list
+int or int
+list
+是
+价格来源。
+枚举值范围：1 - 经纪商；(当前仅支持经纪商
+行情)
+kline_type
+int
+是
+K 线类型。不支持列表传入
+1：1 分钟; (该频率下，入参时间跨度不能超
+过一天)
+2：5 分钟; (该频率下，入参时间跨度不能超
+过七天)
+3：15 分钟; (该频率下，入参时间跨度不能超
+过两周)
+4：30 分钟; (该频率下，入参时间跨度不能超
+过一个月)
+5：60 分钟; (该频率下，入参时间跨度不能超
+过两个月)
+6：1 天; (该频率下，入参时间跨度不能超过
+一年)
+7：1 周; (该频率下，入参时间跨度不能超过
+两年)
+8：1 月; (该频率下，入参时间跨度不能超过
+三年)
+start_dateti
+me
+date，
+datetime
+否
+查询开始时间
+end_datetim
+否
+查询截止时间
+
+
+--- Page 10 ---
+e
+说明：
+•
+开始时间和截止时间均不传：默认获取
+当日全量数据
+•
+开始时间和截止时间任意一个为空：获
+取大于或者小于所传时间范围内的该天数据
+•
+开始时间和截止时间均传：获取时间范
+围内的全量数据
+field_names
+str or str
+list
+否
+字段选择。若为空，默认返回所有字段。
+1.3 最小示例
+Python
+result = client.post_data(
+{"security_id_list": ["2500005.IB",
+"232380073.IB"],"data_source_list":[1],"kline_type":3,"start_datetime": "2026-03-
+30","end_datetime": "2026-03-30"},
+api_path="/dm-quant-func-service/api/v1/bond/market-data/bars"
+)
+print(result)
+1.4 输出指标
+字段名称
+类型
+说明
+security_id
+str
+债券代码
+sec_short_name
+str
+债券简称
+kline_type
+int
+K 线类型
+price_source
+int
+价格来源
+
+
+--- Page 11 ---
+issue_date
+date
+发布时间
+格式：yyyy-mm-dd
+issue_time
+time
+发行时间
+close_yield
+decimal
+收盘收益率(%)
+open_yield
+decimal
+开盘收益率(%)
+high_yield
+decimal
+最高收益率(%)
+low_yield
+decimal
+最低收益率(%)
+ytd_close_yield
+decimal
+昨收收益率(%)
+close_net_price
+decimal
+收盘净价(元)
+open_net_price
+decimal
+开盘净价(元)
+high_net_price
+decimal
+最高净价(元)
+low_net_price
+decimal
+最低净价(元)
+tkn_trade_num
+int
+tkn 笔数
+gvn_trade_num
+int
+gvn 笔数
+trd_trade_num
+int
+trd 笔数
+trade_num
+int
+成交笔数
+2. 债券-日期序列
+2.1 函数信息
+•
+函数范围：该函数为债券日度统计指标，包含不同价源的日度成交统计、日度报
+价统计、估值数据等相关指标。
+
+
+--- Page 12 ---
+•
+函数path：/dm-quant-func-service/api/v1/bond/market-data/date
+•
+数据更新频率：行情类数据次日更新；估值类数据当日更新后即可获取；
+2.2 入参指标
+参数
+类型
+是否必
+填
+说明
+security_i
+d_list
+str or str
+list
+是
+债券代码。
+支持列表传入，最多5 个。格式样例：
+"2500006.IB"
+data_sour
+ce_list
+int or int
+list
+是
+数据来源。
+1 - 经纪商
+2 - 外汇交易中心
+3 - 上交所
+4 - 上固收
+7 - 深交所
+start_date
+date
+否
+查询开始日期
+end_date
+否
+查询截止日期
+说明：
+•
+开始日期和截止日期均不传：默认获取当日
+全量数据
+•
+开始日期和截止日期任意一个为空：获取所
+传日期当日的全量数据
+•
+开始日期和截止日期均传：获取日期范围内
+的全量数据。单次调用时间跨度不能超过三个月
+field_nam
+es
+str or str
+list
+否
+字段选择。若为空，默认返回所有字段。
+2.3 最小示例
+
+
+--- Page 13 ---
+Python
+result = client.post_data(
+{"securityIdList": ["2500005.IB", "232380073.IB"], "dataSourceList": [1],
+"startDate": "2026-03-30",
+"endDate": "2026-03-30"},
+api_path="/dm-quant-func-service/api/v1/bond/market-data/date"
+)
+print(result)
+2.4 输出指标
+字段名称
+类型
+说明
+security_id
+str
+债券代码
+sec_short_name
+str
+债券简称
+issue_date
+date
+发布时间
+data_source
+int
+数据来源
+issue_amount
+decimal
+债券发行额(亿元)
+remaining_tenor
+str
+剩余期限
+issuer_name
+str
+发行人名称
+society_code
+str
+统一社会信用代码
+bond_type
+int
+债券类型
+bond_type_desc
+str
+债券类型描述
+yield
+decimal
+收益率(%)
+net_price
+decimal
+净价(元)
+high_yield
+decimal
+最高收益率(%)
+
+
+--- Page 14 ---
+low_yield
+decimal
+最低收益率(%)
+avg_yield
+decimal
+平均收益率(%)
+high_net_price
+decimal
+最高净价(元)
+low_net_price
+decimal
+最低净价(元)
+avg_net_price
+decimal
+平均净价(元)
+trading_num
+int
+成交笔数
+trading_volume
+decimal
+成交量(万)
+trading_amount
+decimal
+成交金额(万元)
+net_price_sub_close
+decimal
+涨跌净价(元)
+yield_sub_close
+decimal
+涨跌收益率(BP)
+cb_ytm
+decimal
+中债到期收益率(%)
+cb_yte
+decimal
+中债行权收益率(%)
+cb_ytm_ye
+decimal
+中债昨日到期收益率(%)
+cb_yte_ye
+decimal
+中债昨日行权收益率(%)
+cb_net_price
+decimal
+中债净价(元)
+yield_sub_cb
+decimal
+收盘-中债收益率(%)
+net_price_sub_cb
+decimal
+收盘-中债净价(元)
+full_price
+decimal
+全价(元)
+ytm_sub_cb
+decimal
+成交-中债到期收益率(%)
+yte_sub_cb
+decimal
+成交-中债行权收益率(%)
+
+
+--- Page 15 ---
+cb_nptm
+decimal
+中债到期净价(元)
+cb_npte
+decimal
+中债行权净价(元)
+net_price_sub_cb_npt
+m
+decimal
+成交-中债到期净价(元)
+net_price_sub_cb_npte
+decimal
+成交-中债行权净价(元)
+cb_acc_int
+decimal
+中债应计利息(元)
+cb_mdtm
+decimal
+中债到期修正久期
+cb_mdte
+decimal
+中债行权修正久期
+cs_ytm
+decimal
+中证到期收益率(%)
+cs_yte
+decimal
+中证行权收益率(%)
+cs_ytm_ye
+decimal
+中证昨日到期收益率(%)
+cs_yte_ye
+decimal
+中证昨日行权收益率(%)
+ytm_sub_cs
+decimal
+成交-中证到期收益率(%)
+yte_sub_cs
+decimal
+成交-中证行权收益率(%)
+cs_nptm
+decimal
+中证到期净价(元)
+cs_npte
+decimal
+中证行权净价(元)
+net_price_sub_cs_npt
+m
+decimal
+成交-中证到期净价(元)
+net_price_sub_cs_npte
+decimal
+成交-中证行权净价(元)
+cs_acc_int
+decimal
+中证应计利息(元)
+cs_mdtm
+decimal
+中证到期修正久期
+
+
+--- Page 16 ---
+cs_mdte
+decimal
+中证行权修正久期
+spider_net_price
+decimal
+上清所净价(元)
+spider_yield
+decimal
+上清所收益率(%)
+spider_yield_ye
+decimal
+上清所昨日收益率(%)
+spider_md
+decimal
+上清所修正久期
+spider_acc_int
+decimal
+上清所应计利息(元)
+high_ytm
+decimal
+取当天最高的到期收益率(%)
+low_ytm
+decimal
+取当天最低的到期收益率(%)
+wa_ytm
+decimal
+加权平均到期收益率(%)
+closing_ytm
+decimal
+收盘到期收益率(%)
+ytm_sub_close
+decimal
+到期收益率涨跌(BP)
+high_yte
+decimal
+最高行权收益率(%)
+low_yte
+decimal
+最低行权收益率(%)
+wa_yte
+decimal
+加权平均行权收益率(%)
+closing_yte
+decimal
+收盘行权收益率(%)
+yte_sub_close
+decimal
+行权收益率涨跌(BP)
+wa_net_price
+decimal
+加权平均净价(元)
+closing_net_price
+decimal
+收盘净价(元)
+avg_ytm
+decimal
+平均到期收益率(%)
+avg_yte
+decimal
+平均行权收益率(%)
+
+
+--- Page 17 ---
+open_yield
+decimal
+开盘收益率(%)
+open_net_price
+decimal
+开盘净价(元)
+turnover_rate
+decimal
+换手率(%)
+gvn_trade_num
+decimal
+gvn 笔数
+broker 价源特有
+tkn_trade_num
+decimal
+tkn 笔数
+broker 价源特有
+trd_trade_num
+decimal
+trd 成交笔数
+broker 价源特有
+bid_sum_volume_value
+decimal
+买量（万）
+ofr_sum_volume_value
+decimal
+卖量（万）
+bid_quote_num_vol
+int
+买方报价总数(带量报价)(万)
+broker 价源特有
+ofr_quote_num_vol
+int
+卖方报价总数(带量报价)(万)
+broker 价源特有
+bid_high_yield_vol
+decimal
+买方最高收益率(带量报价)(%)
+broker 价源特有
+ofr_high_yield_vol
+decimal
+卖方最高收益率(带量报价)(%)
+broker 价源特有
+bid_low_yield_vol
+decimal
+买方最低收益率(带量报价)(%)
+broker 价源特有
+ofr_low_yield_vol
+decimal
+卖方最低收益率(带量报价)(%)
+
+
+--- Page 18 ---
+broker 价源特有
+bid_open_yield_vol
+decimal
+买方开盘收益率(带量报价)(%)
+broker 价源特有
+ofr_open_yield_vol
+decimal
+卖方开盘收益率(带量报价)(%)
+broker 价源特有
+bid_close_yield_vol
+decimal
+买方收盘收益率(带量报价)(%)
+broker 价源特有
+ofr_close_yield_vol
+decimal
+卖方收盘收益率(带量报价)(%)
+broker 价源特有
+bid_avg_yield_vol
+decimal
+买方平均收益率(带量报价)(%)
+broker 价源特有
+ofr_avg_yield_vol
+decimal
+卖方平均收益率(带量报价)(%)
+broker 价源特有
+bid_quote_num
+int
+买方报价总数(不带量报价)(万)
+broker 价源特有
+ofr_quote_num
+int
+卖方报价总数(不带量报价)(万)
+broker 价源特有
+bid_high_yield
+decimal
+买方最高收益率(不带量报价)(%)
+broker 价源特有
+ofr_high_yield
+decimal
+卖方最高收益率(不带量报价)(%)
+broker 价源特有
+bid_low_yield
+decimal
+买方最低收益率(不带量报价)(%)
+broker 价源特有
+
+
+--- Page 19 ---
+ofr_low_yield
+decimal
+卖方最低收益率(不带量报价)(%)
+broker 价源特有
+bid_open_yield
+decimal
+买方开盘收益率(不带量报价)(%)
+broker 价源特有
+ofr_open_yield
+decimal
+卖方开盘收益率(不带量报价)(%)
+broker 价源特有
+bid_close_yield
+decimal
+买方收盘收益率(不带量报价)(%)
+broker 价源特有
+ofr_close_yield
+decimal
+卖方收盘收益率(不带量报价)(%)
+broker 价源特有
+bid_avg_yield
+decimal
+买方平均收益率(不带量报价)(%)
+broker 价源特有
+ofr_avg_yield
+decimal
+卖方平均收益率(不带量报价)(%)
+broker 价源特有
+3. 债券-实时最新行情（仅当天）
+3.1 函数信息
+•
+函数范围: 该函数包含债券的经纪商和银行间当日实时的最优报价、最新成交
+价，只在获取时最新的价格，一支债券只有一条数据。
+•
+函数path：/dm-quant-func-service/api/v1/bond/market-data/realtime-quote
+•
+数据更新频率：实时更新
+3.2 入参指标
+
+
+--- Page 20 ---
+参数
+类型
+是否必
+填
+说明
+security_id_list
+str or
+str list
+是
+债券代码。
+支持列表传入，单次调用债券个数不能超过
+200 只。
+field_names
+str or
+str list
+否
+字段选择。若为空，默认返回所有字段。
+通过field_names 参数可筛选指定字段，减
+少数据传输。
+3.3 最小示例
+Python
+result = client.post_data(
+{
+"security_id_list":["232580001.IB","2500005.IB"]
+},
+api_path="/dm-quant-func-service/api/v1/bond/market-data/realtime-quote"
+)
+print(result)
+3.4 输出指标
+3.4.1 公共指标
+字段名称
+类型
+说明
+security_id
+str
+债券代码
+sec_short_name
+str
+债券简称
+issue_date
+date
+交易日期
+remaining_tenor
+str
+剩余期限
+coupon_rate
+decimal
+最新票面
+
+
+--- Page 21 ---
+单位：%
+issuer_full_name
+str
+发行主体
+3.4.2 经纪商最新最优报价数据
+字段名称
+类型
+说明
+broker_issue_time
+time
+发布时间(经纪商)
+broker_bid_yield
+decimal
+买收益率(经纪商)(%)
+broker_bid_net_price
+decimal
+买净价(经纪商)(元)
+broker_bid_volume_value
+decimal
+买总量(经纪商)(万)
+broker_ofr_yield
+decimal
+卖收益率(经纪商)(%)
+broker_ofr_net_price
+decimal
+卖净价(经纪商)(%)
+broker_ofr_volume_value
+decimal
+卖总量(经纪商)(万)
+broker_bid_net_price_sub_ofr
+decimal
+bid-ofr 净价(经纪商)(元)
+broker_bid_yield_sub_cb
+decimal
+买收益率-中债(经纪商)(%)
+broker_bid_yield_sub_ofr
+decimal
+bid-ofr 收益率(经纪商)(%)
+broker_cb_yield_sub_ofr
+decimal
+中债-卖收益率(经纪商)(%)
+broker_trade_yield_sub_close
+decimal
+成交-前收（前收涨跌）(经纪商)(%)
+broker_trade_yield_sub_ytd_
+close
+decimal
+成交-昨收（昨收涨跌）(经纪商)(%)
+3.4.3 cfets-xbond 最新报价数据
+
+
+--- Page 22 ---
+字段名称
+类型
+说明
+xbond_issue_time
+time
+发布时间(xbond)
+xbond_bid_yield
+decimal
+买收益率(xbond)(%)
+xbond_bid_net_price
+decimal
+买净价(xbond)(元)
+xbond_bid_volume_val
+ue
+decimal
+买量(xbond)(万)
+xbond_ofr_yield
+decima
+卖收益率(xbond)(%)
+xbond_ofr_net_price
+decimal
+卖净价(xbond)(%)
+xbond_ofr_volume_val
+ue
+decimal
+卖量(xbond)(万)
+3.4.4 cfets-做市报价数据
+字段名称
+类型
+说明
+twoside_issue_time
+time
+发布时间(做市)
+twoside_bid_yield
+decimal
+买收益率(做市)(%)
+twoside_bid_net_price
+decimal
+买净价(做市)(元)
+twoside_bid_volume_val
+ue
+decimal
+买量(做市)(万)
+twoside_bid_party
+var
+报买机构(做市)
+twoside_ofr_yield
+decimal
+卖收益率(做市)(%)
+twoside_ofr_net_price
+decimal
+卖净价(做市)(%)
+twoside_ofr_volume_val
+ue
+decimal
+卖量(做市)(万)
+
+
+--- Page 23 ---
+twoside_ofr_party
+var
+报卖机构(做市)
+3.4.5 经纪商最新成交数据
+字段名称
+类型
+说明
+broker_trade_time
+time
+最新成交时间
+broker_last_trade_pri
+ce
+decimal
+最新成交价
+broker_trade_num
+int
+成交总笔数
+broker_tkn_trade_nu
+m
+int
+TKN 总笔数
+broker_gvn_trade_nu
+m
+int
+GVN 总笔数
+broker_trd_trade_nu
+m
+int
+TRD 总笔数
+3.4.6 CFETS 最新成交数据
+字段名称
+类型
+说明
+cf_trade_time
+time
+最新成交时间
+cf_trading_volu
+me
+decimal
+成交量(万)
+该字段cfets 仅在收盘后公布
+cf_last_ytm
+decimal
+成交收益率(%)
+CFETS 提供的yield 均为ytm
+cf_last_net_pric
+e
+decimal
+成交净价(元)
+cf_last_wa_ytm
+decimal
+加权平均收益率(%)
+
+
+--- Page 24 ---
+4. 债券-机构行为
+4.1 函数信息
+•
+函数范围: 国际货币的债券分歧指数、国利货币的买卖力量指数。
+•
+函数path: /dm-quant-func-service/api/v1/bond/analysis/insti-sentiment
+•
+数据更新频率：实时更新
+4.2 入参指标
+参数
+类型
+是否必
+填
+说明
+data_s
+ource
+int
+是
+数据来源，
+入参枚举范围：10、14；其中：10 表示国际货
+币、14 表示国利货币
+一次调用仅可以获取某一家Broker 的数据
+start_d
+atetime
+date,
+datetime
+否
+查询开始时间
+end_da
+tetime
+date,
+datetime
+否
+查询截止时间
+说明：
+•
+开始日期和截止日期均不传：默认获取当日
+全量数据
+•
+开始日期和截止日期任意一个为空：获取所
+传日期当日的全量数据
+•
+开始日期和截止日期均传：获取日期范围内
+的全量数据。单次调用，时间跨度不能超过一周
+freq_lis
+t
+int or int list
+条件必
+传
+数据频率
+入参枚举范围：1、2、3、4；其中：1 表示频率
+为5min、2 表示频率为60min、3 表示日终
+18:00、4 表示日中12:00
+
+
+--- Page 25 ---
+仅数据来源=国利货币时需要传此字段，且为必
+传。数据来源=国际货币时，无需传此字段，国
+际货币数据频率默认为5min。
+field_n
+ames
+str or str list
+否
+字段选择。若为空，默认返回所有字段。
+4.3 最小示例
+Python
+result = client.post_data(
+{
+"data_source":10,"start_datetime":"2026-03-31","end_datetime":"2026-03-31"
+},
+api_path="/dm-quant-func-service/api/v1/bond/analysis/insti-sentiment"
+)
+print(result)
+4.4 输出指标
+字段名称
+类
+型
+说明
+data_source
+int
+数据来源
+data_source_de
+sc
+str
+数据来源描述
+freq
+int
+数据频率
+freq_desc
+str
+数据频率描述
+issue_date
+dat
+e
+发布日期
+格式：yyyy-mm-dd
+issue_time
+time
+发布时间
+
+
+--- Page 26 ---
+格式：hh:mm:ss
+index_type
+int
+指数类型
+国利货币：
+5511 - 30Y 债券买卖力量对
+5512 - 10Y 国债买卖力量对
+5513 - 10Y 国开买卖力量对比指数
+5514 -地方债买卖力量对比指数
+5515 - 二永债买卖力量对比指数
+5516 - TLAC 债买卖力量对比指数
+5517 - 同业存单买卖力量对比指数
+国际货币：
+1 - 分歧指数(R)
+2 - 分歧指数(10Y CDB)
+index_type_des
+c
+str
+指数类型描述
+index_bank
+str
+指数值-银行
+index_securities
+str
+指数值-券商
+index_insuranc
+e
+str
+指数值-保险
+index_fund
+str
+指数值-广义基金
+index_others
+str
+指数值-其他
+5. 债券-基础资料
+5.1 函数信息
+
+
+--- Page 27 ---
+•
+函数说明：该函数可用于获取债券基础信息。
+•
+函数path：/dm-quant-func-service/api/v1/bond/basic-info/info
+•
+数据更新频率：实时更新
+5.2 入参指标
+参数
+类型
+是否必填
+说明
+security_id_lis
+t
+str or
+str list
+是
+债券代码。
+支持列表传入，单次调用债券个数不能超
+过200 只。
+field_names
+str or
+str list
+否
+字段选择。若为空，默认返回所有字段。
+5.3 最小示例
+Python
+result = client.post_data(
+{
+"securityIdList": ["2500005.IB", "232580001.IB"]
+},
+api_path="/dm-quant-func-service/api/v1/bond/basic-info/info"
+)
+print(result)
+5.4 输出指标
+参数
+类型
+说明
+security_id
+str
+债券代码
+sec_short_name
+str
+债券简称
+sec_full_name
+str
+债券全称
+issuer_name
+str
+发行人名称
+
+
+--- Page 28 ---
+society_code
+str
+统一社会信用代码
+iss_start_date
+date
+发行起始日
+iss_end_date
+date
+发行截止日
+year_pay_date
+date
+每年付息日
+inte_start_date
+date
+起息日
+list_date
+date
+上市日期
+repay_cls_pay_par
+int
+偿还方式
+repay_cls_pay_par
+_desc
+str
+偿还方式说明
+inte_pay_cls_par
+int
+付息方式
+inte_pay_cls_par_d
+esc
+str
+付息方式描述
+next_option_date
+date
+下一行权日
+bond_type
+int
+债券类型
+bond_type_desc
+str
+债券类型描述
+rate_type_par
+int
+利率类型
+rate_type_par_desc
+str
+利率类型描述
+iss_coup_rate
+decimal
+发行票面利率(%)
+new_coup_rate
+decimal
+最新票面利率(%)
+coll_cap_purp
+text
+募集资金用途
+actu_iss_amut
+decimal
+实际发行总额
+
+
+--- Page 29 ---
+new_size
+decimal
+当前债券规模
+circu_amut
+decimal
+流通总额
+bond_par_val
+decimal
+当前债券面值
+matu_pay_date
+date
+理论到期日期
+actu_end_date
+date
+实际到期日
+bond_matu
+str
+债券期限
+remaining_tenor
+str
+剩余期限
+city_annex_flag
+int
+是否城投公司
+0:否1:是
+6. 债券-收益率曲线函数
+6.1 函数信息
+•
+函数说明：获取债券市场在一段时间内收益率曲线水平，包含中债收益率曲线、
+中证收益率曲线。
+•
+函数path：/dm-quant-func-service/api/v1/bond/yield-curve/data
+•
+数据更新频率：次日凌晨更新
+6.2 入参指标
+参数
+类型
+是否必
+填
+说明
+data_source
+int
+是
+数据来源
+18 - 中债；19 - 中证
+curve_name
+str
+是
+曲线名称
+曲线名称范围详见下方6.5 章节
+
+
+--- Page 30 ---
+curve_term
+是
+曲线期限(年)
+单次调用不超过5 个
+curve_type
+int
+否
+曲线类型，若不填则默认获取到期
+1-到期
+2-即期
+3-远期的到期（仅中债）
+4-远期的即期（仅中债）/远期（仅中证）
+forward_n
+decim
+al
+否
+N
+仅中债
+forward_k
+decim
+al
+否
+K
+仅中债
+start_date
+int, str,
+date
+否
+查询开始日期
+end_date
+int, str,
+date
+否
+查询截止日期
+入参时间跨度不超过1 个月
+field_names
+str or
+str list
+否
+字段选择。若为空，默认返回所有字段。
+6.3 最小示例
+Python
+result = client.post_data(
+data={
+"dataSource":"18",
+"curveName": "中债商业银行绿色金融债收益率曲线(AAA)",
+"curveTermList":["1","2"],
+"curveType":"1",
+"startDate":"2026-04-16",
+"endDate":"2026-04-16",
+},
+api_path="/dm-quant-func-service/api/v1/bond/yield-curve/data",
+)
+
+
+--- Page 31 ---
+print(result)
+6.4 输出指标
+出参字段名称
+出参字段类型
+出参字段说明
+data_source
+str
+数据来源
+18 - 中债；19 - 中证
+curve_ch_name
+str
+曲线中文名称
+curve_term
+decimal
+曲线期限(年)
+curve_type
+int
+曲线类型
+1-到期
+2-即期
+3-远期的到期（仅中债）
+4-远期的即期（仅中债）/远期（仅中证）
+forward_n
+decimal
+N
+forward_k
+decimal
+K
+valuation_date
+date
+估值日期
+yield
+decimal
+收益率(%)
+6.5 曲线名称
+序号
+中债-曲线名称
+中证-曲线名称
+1
+中债中短期票据收益率曲线(A＋)
+国债
+2
+中债绿色信用债收益率曲线- 中位数
+国开债
+3
+中债可续期产业债收益率曲线(AAA)
+同业存单(农商)
+4
+中债中资美元债收益率曲线(A＋)
+企业债AAA-
+5
+中债科技创新信用债收益率曲线- 中位数
+同业存单(股份)
+6
+中债普惠主题信用债收益率曲线- 中位数
+同业存单(国有)
+7
+中债乡村振兴信用债收益率曲线- 中位数
+企业债AAA
+8
+中债可续期产业债收益率曲线(AAA-)
+企业债AA
+9
+中债绿色产业债收益率曲线- 中位数
+企业债AA+
+10
+中债绿色商业银行债收益率曲线- 中位数
+企业债AA-
+11
+中债普惠主题产业债收益率曲线- 中位数
+企业债A
+12
+中债普惠主题商业银行债收益率曲线- 中位数
+企业债A+
+13
+中债可续期产业债收益率曲线(AA＋)
+企业债A-
+
+
+--- Page 32 ---
+14
+中债乡村振兴产业债收益率曲线- 中位数
+公司债AAA
+15
+中债乡村振兴商业银行债收益率曲线- 中位数
+公司债AAA-
+16
+中债化工行业债券收益率曲线- 中位数
+公司债AA+
+17
+中债化工行业债券收益率曲线(AA+) - 前20%
+公司债AA
+18
+中债中资美元债收益率曲线(A)
+公司债AA-
+19
+中债可续期产业债收益率曲线(AA)
+公司债A+
+20
+中债化工行业债券收益率曲线(AA+) - 中位数
+公司债A
+21
+中债化工行业债券收益率曲线(AA) - 前20%
+公司债BBB+
+22
+中债化工行业债券收益率曲线(AA) - 中位数
+公司债A-
+23
+中债有色金属行业债券收益率曲线- 中位数
+公司债B
+24
+中债可续期城投债收益率曲线(AAA)
+公司债C
+25
+中债有色金属行业债券收益率曲线(AA+) - 前20%
+公司债BB
+26
+中债有色金属行业债券收益率曲线(AA+) - 中位数
+公司债CCC
+27
+中债有色金属行业债券收益率曲线(AA) - 前20%
+公司债BBB
+28
+中债有色金属行业债券收益率曲线(AA) - 中位数
+中短票据超AAA
+29
+中债可续期城投债收益率曲线(AA＋)
+中短票据AAA-
+30
+中债国有大型商业银行同业存单估值收益率曲线-中位
+数
+中短票据AAA
+31
+中债股份制商业银行同业存单估值收益率曲线-中位数
+中短票据AA+
+32
+中债城市商业银行同业存单估值收益率曲线-中位数
+中短票据AA-
+33
+中债民营银行同业存单估值收益率曲线-中位数
+中短票据AA
+34
+中债农村商业银行及农村信用社同业存单估值收益率
+曲线-中位数
+中短票据A+
+35
+中债钢铁行业债券收益率曲线- 中位数
+中短票据A
+36
+中债中资美元债收益率曲线(A-)
+中短票据A-
+37
+中债中短期票据收益率曲线(AA＋)
+铁道债(减税)
+38
+中债可续期城投债收益率曲线(AA)
+产业债AAA
+39
+中债煤炭行业债券收益率曲线- 中位数
+产业债AA+
+40
+中债房地产行业债券收益率曲线- 中位数
+产业债AAA-
+41
+中债可续期城投债收益率曲线(AA(2))
+产业债AA
+42
+中债煤炭行业债券收益率曲线(AAA) - 前20%
+城投债AAA
+43
+中债煤炭行业债券收益率曲线(AAA) - 中位数
+产业债AA-
+44
+中债煤炭行业债券收益率曲线(AAA-) - 前20%
+城投债AA
+45
+中债中资美元债收益率曲线(BBB＋)
+城投债AA+
+46
+中债煤炭行业债券收益率曲线(AAA-) - 中位数
+城投债AA2
+47
+中债煤炭行业债券收益率曲线(AA+) - 前20%
+城投债AA-
+48
+中债煤炭行业债券收益率曲线(AA+) - 中位数
+地方政府债
+49
+中债煤炭行业债券收益率曲线(AA) - 前20%
+商业银行债AAA
+50
+中债煤炭行业债券收益率曲线(AA) - 中位数
+商业银行债AA+
+51
+中债煤炭行业债券收益率曲线(AA-) - 前20%
+商业银行债AAA-
+52
+中债中资美元债收益率曲线(BBB)
+商业银行债AA
+53
+中债煤炭行业债券收益率曲线(AA-) - 中位数
+商业银行债A+
+54
+中债钢铁行业债券收益率曲线(AAA-) - 前20%
+商业银行债AA-
+55
+中债钢铁行业债券收益率曲线(AAA-) - 中位数
+商业银行债A
+56
+中债钢铁行业债券收益率曲线(AA+) - 前20%
+商业银行债A-
+57
+中债钢铁行业债券收益率曲线(AA+) - 中位数
+进出口行债
+58
+中债中资美元债收益率曲线(BBB-)
+农发行债
+59
+中债钢铁行业债券收益率曲线(AA) - 前20%
+中证商业银行同业存单收益率曲线（AAA-）
+60
+中债钢铁行业债券收益率曲线(AA) - 中位数
+中证商业银行同业存单收益率曲线（AAA）
+61
+中债钢铁行业债券收益率曲线(AA-) - 前20%
+个人住房抵押贷款资产支持证券AAA
+62
+中债钢铁行业债券收益率曲线(AA-) - 中位数
+中证商业银行同业存单收益率曲线（AA）
+63
+中债房地产行业债券收益率曲线(AAA) - 前20%
+中证商业银行同业存单收益率曲线（A）
+64
+中债房地产行业债券收益率曲线(AAA) - 中位数
+中证商业银行同业存单收益率曲线（AA-）
+65
+中债房地产行业债券收益率曲线(AAA-) - 前20%
+中证商业银行同业存单收益率曲线（AA+）
+66
+中债房地产行业债券收益率曲线(AAA-) - 中位数
+中证商业银行二级资本债收益率曲线（AAA-）
+67
+中债房地产行业债券收益率曲线(AA+) - 前20%
+中证商业银行同业存单收益率曲线（A-）
+68
+中债房地产行业债券收益率曲线(AA+) - 中位数
+中证商业银行二级资本债收益率曲线（AA）
+69
+中债房地产行业债券收益率曲线(AA) - 前20%
+中证商业银行同业存单收益率曲线（A+）
+70
+中债房地产行业债券收益率曲线(AA) - 中位数
+中证商业银行二级资本债收益率曲线（AA+）
+71
+中债房地产行业债券收益率曲线(AA-) - 前20%
+中证商业银行无固定期限债收益率曲线（AAA-）
+72
+中债房地产行业债券收益率曲线(AA-) - 中位数
+中证商业银行二级资本债收益率曲线（AA-）
+73
+中债公路行业债券收益率曲线- 中位数
+中证商业银行二级资本债收益率曲线（A）
+74
+中债电力行业债券收益率曲线- 中位数
+中证商业银行二级资本债收益率曲线（A+）
+75
+中债建筑工程行业债券收益率曲线- 中位数
+中证商业银行无固定期限债收益率曲线（A+）
+
+
+--- Page 33 ---
+76
+中债公路行业债券收益率曲线(AAA) - 前20%
+中证商业银行无固定期限债收益率曲线（AA-）
+77
+中债公路行业债券收益率曲线(AAA) - 中位数
+中证商业银行无固定期限债收益率曲线（AA+）
+78
+中债公路行业债券收益率曲线(AAA-) - 前20%
+中证可续期产业债收益率曲线（AAA）
+79
+中债公路行业债券收益率曲线(AAA-) - 中位数
+中证商业银行无固定期限债收益率曲线（AA）
+80
+中债公路行业债券收益率曲线(AA+) - 前20%
+中证可续期产业债收益率曲线（AAA-）
+81
+中债公路行业债券收益率曲线(AA+) - 中位数
+中证可续期产业债收益率曲线（AA+）
+82
+中债电力行业债券收益率曲线(AAA) - 前20%
+中证可续期产业债收益率曲线（AA）
+83
+中债电力行业债券收益率曲线(AAA) - 中位数
+中证非公开发行产业债收益率曲线（AAA-）
+84
+中债中短期票据收益率曲线(AAA＋)
+中证非公开发行产业债收益率曲线（AAA）
+85
+中债电力行业债券收益率曲线(AAA-) - 前20%
+中证非公开发行产业债收益率曲线（AA+）
+86
+中债电力行业债券收益率曲线(AAA-) - 中位数
+中证非公开发行产业债收益率曲线（AA-）
+87
+中债电力行业债券收益率曲线(AA+) - 前20%
+中证非公开发行产业债收益率曲线（AA）
+88
+中债电力行业债券收益率曲线(AA+) - 中位数
+中证可续期城投债收益率曲线（AAA）
+89
+中债电力行业债券收益率曲线(AA) - 前20%
+中证可续期城投债收益率曲线（AA+）
+90
+中债电力行业债券收益率曲线(AA) - 中位数
+中证可续期城投债收益率曲线（AA）
+91
+中债建筑工程行业债券收益率曲线(AAA) - 前20%
+中证非公开发行城投债收益率曲线（AAA）
+92
+中债建筑工程行业债券收益率曲线(AAA) - 中位数
+中证可续期城投债收益率曲线（AA2）
+93
+中债建筑工程行业债券收益率曲线(AAA-) - 前20%
+中证非公开发行城投债收益率曲线（AA）
+94
+中债建筑工程行业债券收益率曲线(AAA-) - 中位数
+中证非公开发行城投债收益率曲线（AA+）
+95
+中债建筑工程行业债券收益率曲线(AA+) - 前20%
+中证非公开发行城投债收益率曲线（AA2）
+96
+中债建筑工程行业债券收益率曲线(AA+) - 中位数
+中证非公开发行城投债收益率曲线（AA-）
+97
+中债建筑工程行业债券收益率曲线(AA) - 前20%
+中证中车交易所债券收益率曲线
+98
+中债建筑工程行业债券收益率曲线(AA) - 中位数
+中证通用交易所债券收益率曲线
+99
+中债建筑工程行业债券收益率曲线(AA-) - 前20%
+中证三峡交易所债券收益率曲线
+100
+中债建筑工程行业债券收益率曲线(AA-) - 中位数
+中证中油交易所债券收益率曲线
+101
+中债非公开发行城投债收益率曲线(AAA)
+中证中旅交易所债券收益率曲线
+102
+中债非公开发行城投债收益率曲线(AA＋)
+中证中交交易所债券收益率曲线
+103
+中债非公开发行城投债收益率曲线(AA)
+中证建材交易所债券收益率曲线
+104
+中债非公开发行城投债收益率曲线(AA(2))
+中证国机交易所债券收益率曲线
+105
+中债非公开发行城投债收益率曲线(AA-)
+中证国新交易所债券收益率曲线
+106
+中债非公开发行产业债收益率曲线(AAA)
+中证唐新交易所债券收益率曲线
+107
+中债非公开发行产业债收益率曲线(AAA-)
+中证诚通交易所债券收益率曲线
+108
+中债非公开发行产业债收益率曲线(AA＋)
+中证国投交易所债券收益率曲线
+109
+中债非公开发行产业债收益率曲线(AA)
+中证国药交易所债券收益率曲线
+110
+中债非公开发行产业债收益率曲线(AA-)
+中证国电投交易所债券收益率曲线
+111
+中债商业银行无固定期限资本债（行权）收益率曲线
+(AAA-)
+中证南网交易所债券收益率曲线
+112
+中债商业银行无固定期限资本债（行权）收益率曲线
+(AA＋)
+中证保利交易所债券收益率曲线
+113
+中债商业银行无固定期限资本债（行权）收益率曲线
+(AA)
+中证长电交易所债券收益率曲线
+114
+中债中短期票据收益率曲线(AAA-)
+中证石化交易所债券收益率曲线
+115
+中债商业银行无固定期限资本债（行权）收益率曲线
+(AA-)
+中证中信交易所债券收益率曲线
+116
+中债商业银行无固定期限资本债（行权）收益率曲线
+(A＋)
+中证中海交易所债券收益率曲线
+117
+中债次级可续期产业债收益率曲线(AAA-)
+中证铁工交易所债券收益率曲线
+118
+中债次级可续期产业债收益率曲线(AA＋)
+中证华电交易所债券收益率曲线
+119
+中债次级可续期产业债收益率曲线(AA)
+中证核风电交易所债券收益率曲线
+120
+中债非公开发行证券公司债收益率曲线(AAA)
+中证新际交易所债券收益率曲线
+121
+中债非公开发行证券公司债收益率曲线(AAA-)
+中证建银交易所债券收益率曲线
+122
+中债证券公司永续次级债收益率曲线(AAA-)
+中证交易所资产支持证券收益率曲线（AAA）
+123
+中债证券公司永续次级债收益率曲线(AA＋)
+中证交易所资产支持证券收益率曲线（AA+）
+124
+中债次级可续期产业债收益率曲线(AA-)
+中证交易所资产支持证券收益率曲线（AAA-）
+125
+中债中短期票据收益率曲线(AAA)
+中证交易所资产支持证券收益率曲线（AA）
+126
+中债中短期票据收益率曲线(AA-)
+中证绿色城投债券收益率曲线（AAA）
+127
+中债中短期票据收益率曲线(AA)
+中证交易所资产支持证券收益率曲线（AA-）
+128
+中债中短期票据收益率曲线(A-)
+中证绿色城投债券收益率曲线（AA+）
+129
+中债中短期票据收益率曲线(A)
+中证绿色产业债券收益率曲线（AAA+）
+130
+中债铁道债收益率曲线(减税)
+中证绿色产业债券收益率曲线（AAA）
+131
+中债离岸人民币中国主权债收益率曲线
+中证证券公司债收益率曲线（AA+）
+132
+中债铁道债收益率曲线
+中证证券公司债收益率曲线（AAA-）
+133
+中债离岸人民币中国政策性金融债收益率曲线
+中证证券公司债收益率曲线（AA）
+134
+中债商业银行普通债收益率曲线(A＋)
+中证证券公司债收益率曲线（AAA）
+
+
+--- Page 34 ---
+135
+中债城投中资美元债收益率曲线(A)
+中证银行业非存款类金融机构债收益率曲线（AAA-）
+136
+中债城投中资美元债收益率曲线(A-)
+中证银行业非存款类金融机构债收益率曲线（AA-）
+137
+中债商业银行普通债收益率曲线(AA＋)
+中证银行业非存款类金融机构债收益率曲线（AA+）
+138
+中债城投中资美元债收益率曲线(BBB＋)
+中证浮动利率债券个人住房抵押贷款资产支持证券
+（LPR-5Y）利差收益率曲线（AAA）
+139
+中债商业银行普通债收益率曲线(AAA-)
+中证银行业非存款类金融机构债收益率曲线（AA）
+140
+中债城投中资美元债收益率曲线(BBB)
+中证浮动利率债券个人住房抵押贷款资产支持证券
+（Loan-5Y）利差收益率曲线（AAA）
+141
+中债城投中资美元债收益率曲线(BBB-)
+中证浮动利率债券政策性金融债（LPR-1Y）利差收益率
+曲线
+142
+中债商业银行普通债收益率曲线(AAA)
+中证电力行业债券收益率曲线（AAA-）
+143
+中债城投中资美元债收益率曲线(BB＋)
+中证电力行业债券收益率曲线（AAA）
+144
+中债城投中资美元债收益率曲线(BB)
+中证高速公路行业债券收益率曲线（AAA）
+145
+中债城投中资美元债收益率曲线(BB-)
+中证电力行业债券收益率曲线（AA）
+146
+中债房地产行业中资美元债收益率曲线(BBB＋)
+中证电力行业债券收益率曲线（AA+）
+147
+中债商业银行普通债收益率曲线(AA-)
+中证高速公路行业债券收益率曲线（AA）
+148
+中债房地产行业中资美元债收益率曲线(BBB)
+中证高速公路行业债券收益率曲线（AA+）
+149
+中债房地产行业中资美元债收益率曲线(BBB-)
+中证煤炭行业债券收益率曲线（AAA-）
+150
+中债商业银行普通债收益率曲线(AA)
+中证高速公路行业债券收益率曲线（AAA-）
+151
+中债房地产行业中资美元债收益率曲线(BB＋)
+中证煤炭行业债券收益率曲线（AAA）
+152
+中债商业银行普通债收益率曲线(A-)
+中证煤炭行业债券收益率曲线（AA）
+153
+中债房地产行业中资美元债收益率曲线(BB)
+中证煤炭行业债券收益率曲线（AA+）
+154
+中债房地产行业中资美元债收益率曲线(BB-)
+中证交易所科创债收益率曲线（AAA）
+155
+中债商业银行普通债收益率曲线(A)
+中证交易所科创债收益率曲线（AAA-）
+156
+中债房地产行业中资美元债收益率曲线(B＋)
+中证交易所科创债收益率曲线（AA+）
+157
+中债房地产行业中资美元债收益率曲线(B)
+158
+中债企业债收益率曲线(CCC)
+159
+中债企业债收益率曲线(CC)
+160
+中债房地产行业中资美元债收益率曲线(B-)
+161
+中债企业债收益率曲线(BBB＋)
+162
+中债房地产行业中资美元债收益率曲线(CCC＋)
+163
+中债中资美元债收益率曲线(BB＋)
+164
+中债中资美元债收益率曲线(BB)
+165
+中债中资美元债收益率曲线(BB-)
+166
+中债中资美元债收益率曲线(B＋)
+167
+中债中资美元债收益率曲线(B)
+168
+中债中资美元债收益率曲线(B-)
+169
+中债企业债收益率曲线(BBB)
+170
+中债中资美元债收益率曲线(CCC＋)
+171
+中债企业债收益率曲线(BB)
+172
+中债中资欧元债收益率曲线(A＋)
+173
+中债企业债收益率曲线(B)
+174
+中债中资欧元债收益率曲线(A)
+175
+中债企业债收益率曲线(A＋)
+176
+中债中资欧元债收益率曲线(A-)
+177
+中债中资欧元债收益率曲线(BBB＋)
+178
+中债中资欧元债收益率曲线(BBB)
+179
+中债中资欧元债收益率曲线(BBB-)
+180
+中债中资欧元债收益率曲线(BB＋)
+181
+中债企业债收益率曲线(AA＋)
+182
+中债企业债收益率曲线(AAA-)
+183
+中债浮动利率中资美元债(SOFR-90D)点差曲线(A)
+184
+中债离岸人民币金融债收益率曲线(A)
+185
+中债离岸人民币金融债收益率曲线(A-)
+186
+中债离岸人民币金融债收益率曲线(BBB＋)
+187
+中债金融行业中资美元债收益率曲线(A＋)
+188
+中债金融行业中资美元债收益率曲线(A)
+189
+中债企业债收益率曲线(AAA)
+190
+中债金融行业中资美元债收益率曲线(BBB＋)
+191
+中债金融行业中资美元债收益率曲线(BBB)
+192
+中债离岸人民币公司信用债收益率曲线(A)
+193
+中债离岸人民币公司信用债收益率曲线(BBB＋)
+194
+中债离岸人民币公司信用债收益率曲线(BBB)
+195
+中债离岸人民币公司信用债收益率曲线(BB＋)
+
+
+--- Page 35 ---
+196
+中债离岸人民币公司信用债收益率曲线(BB)
+197
+中债企业债收益率曲线(AA-)
+198
+中债企业债收益率曲线(AA)
+199
+中债企业债收益率曲线(A-)
+200
+中债企业债收益率曲线(A)
+201
+中债农发行债收益率曲线
+202
+中债进出口行债收益率曲线
+203
+中债国债收益率曲线
+204
+中债国开债收益率曲线
+205
+中债浮动利率政策性金融债(Depo-1Y)点差曲线
+206
+中债浮动利率商业银行普通债(SHIBOR-3M-1D)点差曲
+线(AA＋)
+207
+中债浮动利率商业银行普通债(SHIBOR-3M-1D)点差曲
+线(AAA-)
+208
+中债城投债收益率曲线(AA＋)
+209
+中债城投债收益率曲线(AAA)
+210
+中债城投债收益率曲线(AA-)
+211
+中债城投债收益率曲线(AA)
+212
+中债城投债收益率曲线(AA(2))
+213
+中债商业银行二级资本债收益率曲线(AAA-)
+214
+中债商业银行二级资本债收益率曲线(AA＋)
+215
+中债商业银行二级资本债收益率曲线(AA)
+216
+中债商业银行二级资本债收益率曲线(AA-)
+217
+中债商业银行二级资本债收益率曲线(A＋)
+218
+中债商业银行二级资本债收益率曲线(A)
+219
+中债商业银行同业存单收益率曲线(AAA-)
+220
+中债商业银行同业存单收益率曲线(AAA)
+221
+中债商业银行同业存单收益率曲线(AA＋)
+222
+中债商业银行同业存单收益率曲线(AA)
+223
+中债商业银行同业存单收益率曲线(AA-)
+224
+中债商业银行同业存单收益率曲线(A＋)
+225
+中债商业银行同业存单收益率曲线(A)
+226
+中债商业银行同业存单收益率曲线(A-)
+227
+中债个人住房抵押贷款资产支持证券收益率曲线(AAA)
+228
+中债浮动利率个人住房抵押贷款资产支持证券(Loan-
+5Y)点差曲线(AAA)
+229
+中债消费金融资产支持证券收益率曲线(AAA)
+230
+中债消费金融资产支持证券收益率曲线(AA＋)
+231
+中债消费金融资产支持证券收益率曲线(AA)
+232
+中债消费金融资产支持证券收益率曲线(AA-)
+233
+中债对公贷款与租赁债权资产支持证券收益率曲线
+(AAA)
+234
+中债对公贷款与租赁债权资产支持证券收益率曲线(AA
+＋)
+235
+中债对公贷款与租赁债权资产支持证券收益率曲线
+(AA)
+236
+中债对公贷款与租赁债权资产支持证券收益率曲线
+(AA-)
+237
+中债企业资产支持证券收益率曲线(AAA)
+238
+中债企业资产支持证券收益率曲线(AAA-)
+239
+中债企业资产支持证券收益率曲线(AA＋)
+240
+中债企业资产支持证券收益率曲线(AA)
+241
+中债企业资产支持证券收益率曲线(AA-)
+242
+中债企业资产支持证券收益率曲线(A＋)
+243
+中债证券公司债收益率曲线(AAA)
+244
+中债证券公司债收益率曲线(AAA-)
+245
+中债证券公司债收益率曲线(AA＋)
+246
+中债证券公司债收益率曲线(AA)
+247
+中债银行业非存款类金融机构债收益率曲线(AAA-)
+248
+中债银行业非存款类金融机构债收益率曲线(AA＋)
+249
+中债银行业非存款类金融机构债收益率曲线(AA)
+250
+中债银行业非存款类金融机构债收益率曲线(AA-)
+251
+中债银行业非存款类金融机构二级资本债收益率曲线
+(AA＋)
+
+
+--- Page 36 ---
+252
+中债浮动利率个人住房抵押贷款资产支持证券(LPR-
+5Y)点差曲线(AAA)
+253
+中债浮动利率政策性金融债(LPR-1Y)点差曲线
+254
+中债证券公司次级债收益率曲线(AA＋)
+255
+中债证券公司次级债收益率曲线(AA)
+256
+中债保险公司资本补充债收益率曲线(AA＋)
+257
+中债保险公司资本补充债收益率曲线(AA)
+258
+中债保险公司资本补充债收益率曲线(AA-)
+259
+中债证券公司次级债收益率曲线(AAA-)
+260
+中债商业银行总损失吸收能力非资本债收益率曲线
+(AAA-)
+261
+中债融资租赁公司债收益率曲线(AA＋)
+262
+中债融资租赁公司债收益率曲线(AA)
+263
+中债融资租赁公司债收益率曲线(AA-)
+264
+中债政策性银行绿色金融债收益率曲线
+265
+中债商业银行绿色金融债收益率曲线(AAA)
+266
+中债商业银行绿色金融债收益率曲线(AAA-)
+267
+财政部-中国地方政府债券收益率曲线
+7. 债券-发行人维度存续债调取
+7.1 函数信息
+•
+函数说明：根据发行人白名单调取当前所有境内存续债（除取消发行）。
+•
+函数path：/dm-quant-func-service/api/v1/bond/basic-info/outstanding-bonds
+•
+数据更新频率：不定期更新
+7.2 入参指标
+参数
+类型
+是否必
+填
+说明
+issuer_full_n
+ame
+str
+两个字
+段有一
+个不为
+空即
+可；结
+果返回
+取并集
+发行人名称。
+society_code
+str
+统一社会信用代码。
+field_names
+str
+否
+字段选择。若为空，默认返回所有字段。
+offset
+int
+否
+翻页游标。首批默认为0，后续传上次返回的
+max_Offset ，表示从该位置开始拉取, 不指定
+则从0 开始
+
+
+--- Page 37 ---
+7.3 最小示例
+Python
+result = client.post_data(
+{
+"issuerFullName": "万科企业股份有限公司",
+},
+api_path="/dm-quant-func-service/api/v1/bond/basic-info/outstanding-bonds",
+return_type='dict'
+)
+print(pd.DataFrame(result['list']))
+print("maxOffset：", result.get("max_offset"))
+7.4 输出指标
+出参字段名称
+出参字段类型
+出参字段说明
+security_id
+str
+债券代码
+sec_short_name
+str
+债券简称
+sec_full_name
+str
+债券全称
+issuer_name
+str
+发行人名称
+society_code
+str
+统一社会信用代码
+inte_start_date
+date
+起息日
+actu_end_date
+date
+实际到期日
+remaining_tenor
+str
+剩余期限
+bond_type
+int
+债券类型
+bond_type_desc
+str
+债券类型描述
+Max_Offset
+str
+翻页游标。单次返回限制条数，超出范围需
+翻页。每次查询输出为本批次最大游标；下
+次请求传该值作为offset 继续拉取即可。
+
+
+--- Page 38 ---
+8. 债券-活跃券/次活跃券
+8.1 函数信息
+•
+函数说明：用于获取指定类型债券（国债/ 国开债）的活跃券或次活跃券。
+•
+函数path：/dm-quant-func-service/api/v1/bond/market-data/rolling-bonds
+•
+数据更新频率：日度更新
+8.2 入参指标
+参数
+类型
+是否必
+填
+说明
+sequence_ty
+pe
+int
+是
+序列类型
+枚举值范围：
+1-活跃券
+2-次活跃券
+bond_filter_t
+ype
+int
+是
+债券类型
+枚举值范围：
+1-国债
+3-国开
+key_tenor
+int or
+int list
+是
+关键期限
+枚举值范围：
+1:1Y
+2:2Y
+3:3Y
+5:5Y
+7:7Y
+10:10Y
+15:15Y
+20:20Y
+
+
+--- Page 39 ---
+30:30Y（仅国债）
+50:50Y（仅国债）
+start_date
+int, str,
+date
+否
+查询开始日期
+end_date
+int, str,
+date
+否
+查询截止日期
+说明：
+•
+开始日期不填，默认往前取一年，结束日
+期不填，默认当天
+•
+开始时间和截止时间均传：获取时间范围
+内的全量数据，可查询时间窗口不超过1 年
+field_names
+str or
+str list
+否
+字段选择。若为空，默认返回所有字段。
+8.3 最小示例
+Python
+result = client.post_data(
+{
+"sequenceType": "1",
+"bondFilterType": "1",
+"keyTenor":["10"],
+"startDate": "2026-05-18",
+"endDate": "2026-05-18"
+},
+api_path="/dm-quant-func-service/api/v1/bond/market-data/rolling-bonds"
+)
+print(result)
+8.4 输出指标
+出参字段名称
+出参字段类型
+出参字段说明
+trade_date
+date
+交易日
+lc_bond_code
+Str
+主连债券代码
+
+
+--- Page 40 ---
+lc_bond_short_n
+ame
+Str
+主连债券简称
+sequence_type
+int
+序列类型
+1-活跃券
+2-次活跃券
+bond_filter_type
+int
+债券类型
+1-国债
+3-国开
+key_tenor
+int
+关键期限
+1:1Y
+2:2Y
+3:3Y
+5:5Y
+7:7Y
+10:10Y
+15:15Y
+20:20Y
+30:30Y
+50:50Y
+bond_code
+Str
+债券代码
+bond_short_nam
+e
+Str
+债券简称
+9. 货币市场-日期序列
+9.1 函数信息
+•
+函数说明：获取货币市场各类回购、拆借、基准利率等品种的日度行情数据。
+•
+函数path：/dm-quant-func-service/api/v1/money-market/data/date
+•
+数据更新频率：日度更新
+
+
+--- Page 41 ---
+•
+支持入参的品种范围：
+交易市场
+交易品种
+品种代码
+CFETS
+质押式回购
+DR、R
+买断式回购
+OR
+信用拆借
+IBO
+债券借贷
+L
+基准利率
+Shibor、FDR、FR
+上交所
+债券质押式回购
+GC
+深交所
+债券质押式回购
+R-
+9.2 入参指标
+参数
+类型
+是否必填
+说明
+instrument_t
+ype_list
+str or
+str list
+二选一入
+参，均填
+写以
+instrume
+nt_code
+为准
+品种类别。
+入参范围：DR、R、OR、IBO、L、Shibor、
+FDR、FR、GC、R-
+instrument_c
+ode
+str or
+str list
+品种代码。
+支持列表传入，单次最多5 个。样例：
+"DR007"
+start_date
+date
+否
+查询开始日期
+end_date
+date
+否
+查询截止日期
+说明：
+•
+开始日期和截止日期均不传：默认获取
+当日全量数据
+
+
+--- Page 42 ---
+•
+开始日期和截止日期任意一个为空：获
+取所传日期当日的全量数据
+•
+开始日期和截止日期均传：获取日期范
+围内的全量数据。单次调用，最长时间跨度不
+能超过一周。
+field_names
+str or
+str list
+否
+字段选择。若为空，默认返回所有字段。
+9.3 最小示例
+Python
+result = client.post_data(
+{
+"instrument_type_list":["dr","Shibor"],"start_date":"2026-03-
+31","end_date":"2026-03-31"
+},
+api_path="/dm-quant-func-service/api/v1/money-market/data/date"
+)
+print(result)
+9.4 输出指标
+出参字段名称
+出参字段类型
+出参字段说明
+instrument_code
+str
+品种代码
+instrument_type
+str
+品种类型
+security_id
+str
+交易代码
+issue_date
+date
+交易日
+high_yield
+decimal
+最高利率
+low_yield
+decimal
+最低利率
+open_yield
+decimal
+开盘利率
+
+
+--- Page 43 ---
+close_yield
+decimal
+收盘利率
+wa_yield
+decimal
+加权平均利率
+pre_wa_yield
+decimal
+前加权平均利率
+pre_close_yield
+decimal
+前收盘利率
+trade_volume
+decimal
+成交量
+单位：万
+shibor_ma5
+decimal
+shibor-5 日移动平均
+shibor 特有字段
+shibor_ma10
+decimal
+shibor-10 日移动平均
+shibor 特有字段
+shibor_ma20
+decimal
+shibor-20 日移动平均
+shibor 特有字段
+shibor_ma120
+decimal
+shibor-120 日移动平均
+shibor 特有字段
+10. 货币市场-资金情绪指数
+10.1 函数信息
+•
+函数说明：CNEX 国际货币的资金情绪指数。CNEX 资金情绪指数采用类似于
+PMI 指数形式，从0 至100 紧张度递增，50 为均衡，超过50 即反映资金紧张。资金
+情绪指数在每日四个时点生成，分别为8:45、10:15、14:30、16:00。
+•
+函数path：/dm-quant-func-service/api/v1/money-market/analysis/sentiment-
+index
+•
+数据更新频率：每天8:45、10:15、14:30、16:00 更新
+
+
+--- Page 44 ---
+10.2 入参指标
+参数
+类型
+是否必
+填
+说明
+start_dat
+e
+date
+否
+查询开始日期
+end_dat
+e
+date
+否
+查询截止日期
+说明：
+•
+开始日期和截止日期均不传：默认获取当
+日全量数据
+•
+开始日期和截止日期任意一个为空：获取
+所传日期当日的全量数据
+•
+开始日期和截止日期均传：获取日期范围
+内的全量数据。单次调用，时间跨度不能超过
+两个月。
+field_na
+mes
+str or str
+list
+否
+字段选择。若为空，默认返回所有字段。
+10.3 最小示例
+Python
+result = client.post_data(
+{
+"start_date":"2026-03-31","end_date":"2026-03-31"
+},
+api_path="/dm-quant-func-service/api/v1/money-market/analysis/sentiment-
+index"
+)
+print(result)
+10.4 输出指标
+出参字段名称
+出参字段
+类型
+出参字段说明
+
+
+--- Page 45 ---
+issue_date
+date
+交易日
+格式：yyyy-mm-dd
+issue_time
+time
+时点类型
+格式：hh:mm:ss
+index_all
+decimal
+指数值-全市场
+index_sibs
+decimal
+指数值-大行
+index_smbs
+decimal
+指数值-中小行
+index_nbfis
+decimal
+指数值-非银机构
+11. 期货-高频序列
+11.1 函数信息
+•
+函数说明：获取指定期货或期货列表的Kline 统计数据（包含起始日开始的分钟
+线、日线、周线和月线）。(当前仅支持国债期货)
+•
+数据path：/dm-quant-func-service/api/v1/futures/market-data/bars
+•
+数据更新频率：实时更新
+11.2 入参指标
+参数
+类型
+是否必
+填
+说明
+security_id_li
+st
+str or
+str list
+是
+期货代码。
+支持列表传入，单次最多5 个。格式样例：
+"TF2606"
+kline_type
+int
+是
+K 线类型。不支持列表传入
+1：1 分钟; (该频率下，入参时间跨度不能超过
+
+
+--- Page 46 ---
+一天)
+2：5 分钟; (该频率下，入参时间跨度不能超过
+七天)
+3：15 分钟; (该频率下，入参时间跨度不能超
+过两周)
+4：30 分钟; (该频率下，入参时间跨度不能超
+过一个月)
+5：60 分钟; (该频率下，入参时间跨度不能超
+过两个月)
+6：1 天; (该频率下，入参时间跨度不能超过一
+年)
+7：1 周; (该频率下，入参时间跨度不能超过两
+年)
+8：1 月; (该频率下，入参时间跨度不能超过三
+年)
+start_datetim
+e
+date,da
+tetime
+否
+查询开始时间
+end_datetim
+e
+date,da
+tetime
+否
+查询截止时间
+field_names
+str or
+str list
+否
+字段选择。若为空，默认返回所有字段。
+11.3 最小示例
+Python
+result = client.post_data(
+{
+"security_id_list":["T2603","T2606"],"start_date":"2026-02-
+21","end_date":"2026-02-21","kline_type":1
+},
+api_path="/dm-quant-func-service/api/v1/futures/market-data/bars"
+)
+print(result)
+11.4 输出指标
+
+
+--- Page 47 ---
+出参字段名
+称
+出参字段类型
+出参字段说明
+security_id
+str
+期货代码
+kline_type
+int
+K 线类型
+issue_date
+date
+交易日
+issue_time
+datetime
+统计时间
+high_price
+decimal
+最高价
+low_price
+decimal
+最低价
+open_price
+decimal
+开盘价
+close_price
+decimal
+收盘价
+settlement_
+price
+decimal
+今结算
+up_down_v
+alue
+decimal
+涨跌
+up_down_p
+ct
+decimal
+涨跌幅
+单位：%
+width_perc
+ent
+decimal
+振幅
+单位：%
+open_intere
+st
+decimal
+增仓
+单位：手
+oi_change
+decimal
+持仓量
+单位：手
+volume_ch
+decimal
+成交量
+
+
+--- Page 48 ---
+ange
+单位：手
+12. 期货-日期序列衍生
+12.1 函数信息
+•
+函数说明：获取国债期货与可交割券的日度计算指标，包括基差、净基差、IRR
+等市场关注指标。
+•
+数据path：/dm-quant-func-service/api/v1/futures/analysis/basis
+•
+数据更新频率：日度更新
+12.2 入参指标
+参数
+类型
+是否必
+填
+说明
+security_id_l
+ist
+str or str
+list
+是
+期货代码
+支持列表传入，单次最多20 个。格式样例：
+"TF2606"
+start_date
+date
+否
+查询开始日期
+end_date
+date
+否
+查询截止日期
+说明：
+•
+开始日期和截止日期均不传：默认获取
+当日全量数据
+•
+开始日期和截止日期任意一个为空：获
+取所传日期当日的全量数据
+•
+开始日期和截止日期均传：获取日期范
+围内的全量数据。单次调用，时间跨度不能
+超过三个月。
+field_names
+str or str
+list
+否
+字段选择。若为空，默认返回所有字段。
+
+
+--- Page 49 ---
+12.3 最小示例
+Python
+result = client.post_data(
+{
+"security_id_list": ["TF2106"],"start_date": "2021-01-04","end_date": "2021-
+01-04"},
+api_path="/dm-quant-func-service/api/v1/futures/analysis/basis"
+)
+print(result)
+12.4 输出指标
+出参字段名称
+出参字段类
+型
+出参字段说明
+security_id
+str
+期货代码
+issue_date
+date
+交易日
+bond_code
+str
+可交割券
+conversion_fact
+or
+decimal
+转换因子
+future_price
+期货价格
+trade_yield
+decimal
+现券收益率
+单位：%
+trade_net_price
+decimal
+现券净价
+trade_time
+time
+现券成交时间
+trade_num
+int
+现券成交笔数(15:15)
+open_basis
+decimal
+开盘基差
+
+
+--- Page 50 ---
+close_basis
+decimal
+收盘基差
+high_basis
+decimal
+最高基差
+low_basis
+decimal
+最低基差
+open_irr
+decimal
+开盘IRR
+单位：%
+close_irr
+decimal
+收盘IRR
+单位：%
+high_irr
+decimal
+最高IRR
+单位：%
+low_irr
+decimal
+最低IRR
+单位：%
+open_bnoc
+decimal
+开盘净基差
+close_bnoc
+decimal
+收盘净基差
+high_bnoc
+decimal
+最高净基差
+low_bnoc
+decimal
+最低净基差
+13. 期货-成交持仓排名
+13.1 函数信息
+•
+函数说明：中金所每日盘后公布的国债期货-机构持仓排名数据，包含持买单量排
+名，持卖单量排名，成交量排名。
+•
+函数path：/dm-quant-func-service/api/v1/futures/analysis/vol-oi-rank
+•
+数据更新频率：日度盘后16:00 左右更新
+
+
+--- Page 51 ---
+13.2 入参指标
+参数
+类型
+是否必
+填
+说明
+security_id_li
+st
+str or
+str list
+是
+期货品种。
+格式样例："TF2603"
+start_date
+date
+否
+查询开始日期
+end_date
+date
+否
+查询截止日期
+说明：
+•
+开始日期和截止日期均不传：默认获取当
+日全量数据
+•
+开始日期和截止日期任意一个为空：获取
+所传日期当日的全量数据
+•
+开始日期和截止日期均传：获取日期范围
+内的全量数据。单次调用，时间跨度不能超过
+一周。
+field_names
+str or
+str list
+否
+字段选择。若为空，默认返回所有字段。
+13.3 最小示例
+Python
+result = client.post_data(
+{"securityIdList": ["TL2603", "T2603"],"startDate": "2026-01-19","endDate":
+"2026-01-19"},
+api_path="/dm-quant-func-service/api/v1/futures/analysis/vol-oi-rank"
+)
+print(result)
+13.4 输出指标
+
+
+--- Page 52 ---
+出参字段名称
+出参字段类型
+出参字段说明
+security_id
+str
+期货代码
+issue_date
+date
+交易日
+ranking_type
+str
+排名类型
+member_abbr
+str
+会员简称
+ranking
+int
+名次
+volume
+decimal
+量
+单位：手
+排名类型=持买单量排名，持卖单量排名时，该
+字段表示持仓量；
+排名类型=成交量排名时，该字段表示成交量；
+cur_volume_d
+ay
+decimal
+比上交易日增减
+单位：手
+14. 权益-高频序列
+14.1 函数信息
+•
+函数说明：获取指定资产（资产类别当前支持交易所股票、基金、指数）的Kline
+统计数据（包含起始日开始的分钟线、日线、周线和月线）。
+•
+函数path：/dm-quant-func-service/api/v1/equity/market-data/bars
+•
+数据更新频率：实时更新
+14.2 入参指标
+参数
+类型
+是否必填
+说明
+
+
+--- Page 53 ---
+security_cate
+gory
+int
+是
+资产类别。
+1-股票
+2-基金
+3-指数
+security_id_li
+st
+str or str list
+是
+证券代码。
+支持列表传入，单次最多5 个。
+格式样例："000001.SZ"
+kline_type
+int
+是
+K 线类型。不支持列表传入
+1：1 分钟; (该频率下，入参时间跨
+度不能超过一天)
+2：5 分钟; (该频率下，入参时间跨
+度不能超过七天)
+3：15 分钟; (该频率下，入参时间跨
+度不能超过两周)
+4：30 分钟; (该频率下，入参时间跨
+度不能超过一个月)
+5：60 分钟; (该频率下，入参时间跨
+度不能超过两个月)
+6：1 天; (该频率下，入参时间跨度
+不能超过一年)
+7：1 周; (该频率下，入参时间跨度
+不能超过两年)
+8：1 月; (该频率下，入参时间跨度
+不能超过三年)
+start_datetim
+e
+date,datetime
+否
+查询开始时间
+end_datetim
+e
+date,datetime
+否
+查询截止时间
+field_names
+str or str list
+否
+字段选择。若为空，默认返回所有字
+段。
+14.3 最小示例
+
+
+--- Page 54 ---
+Python
+result = client.post_data(
+{
+"securityIdList": ["000001.SZ"],
+"securityCategory":"1",
+"klineType":"6",
+"start_datetime": "2026-05-18",
+"end_datetime": "2026-05-18"
+},
+api_path="/dm-quant-func-service/api/v1/equity/market-data/bars"
+)
+print(result)
+14.4 输出指标
+出参字段名称
+出参字段类型
+出参字段说明
+security_id
+String
+证券代码
+sec_short_name
+String
+证券简称
+kline_type
+Integer
+K 线类型
+issue_date
+date
+发布时间
+issue_time
+datetime
+统计时间
+open_value
+decimal
+开盘价
+high_value
+decimal
+最高价
+low_value
+decimal
+最低价
+close_value
+decimal
+收盘价
+cur_volume
+decimal
+成交量
+单位：手
+cur_amount
+decimal
+金额
+
+
+--- Page 55 ---
+单位：元
+width_percent
+decimal
+振幅
+单位：%
+up_down_value
+decimal
+涨跌
+price_up_down_pct
+decimal
+涨跌幅
+单位：%
+ytd_close_value
+decimal
+昨收价
+15. EDB-指标ID 获取
+15.1 函数信息
+•
+函数说明：获取DM 宏观EDB 指标ID 与核心基础信息，包括指标名称、单位、
+频率等。
+•
+函数path：/dm-quant-func-service/api/v1/edb/data-info/code
+•
+数据更新频率：实时更新
+15.2 入参指标
+参数
+类型
+是否必
+填
+说明
+edb_level_id_li
+st
+str or str
+list
+是
+指标层级code。
+层级code 详见：
+格式样例："CN002003003"
+field_names
+str or str
+list
+否
+字段选择。若为空，默认返回所有字
+段。
+offset
+str
+否
+翻页游标。查询条件为indicator_id >
+offset。首批不传，后续传上次返回的
+
+
+--- Page 56 ---
+max_Offset
+15.3 最小示例
+Python
+result = client.post_data(
+data={
+"edbLevelIdList": ["CN0011841695", "CN0011841696"],
+},
+api_path="/dm-quant-func-service/api/v1/edb/data-info/code",
+return_type='dict'
+)
+print(pd.DataFrame(result['list']))
+15.4 输出指标
+出参字段名称
+出参字段类
+型
+出参字段说明
+indicator_id
+str
+指标ID
+indicator_name
+str
+指标名称
+basic_indicator_
+unit
+str
+指标单位
+data_status
+str
+指标更新状态
+statistical_frequ
+ency
+str
+指标频率
+region_name
+str
+所属国别/区域
+Max_Offset
+str
+翻页游标。单次限制200 条，超出范围需翻页。
+每次查询输出为本批次最大游标，对应本批最后
+一条indicator_id；下次请求传该值作为offset
+继续拉取即可。
+
+
+--- Page 57 ---
+16. EDB-指标数值调取
+16.1 函数信息
+•
+函数说明：获取DM 宏观EDB 数据。DM 宏观EDB 数据库聚焦宏观领域，全面
+覆盖国民经济核算、金融、贸易、房地产、就业等核心宏观指标。
+•
+函数path：/dm-quant-func-service/api/v1/edb/data-info/data
+•
+数据更新频率：最晚T+1 更新
+16.2 入参指标
+参数
+类型
+是否必填
+说明
+indicator_id
+str
+是
+指标ID。
+格式样例："M00100066100000"
+start_date
+date
+否
+查询开始日期
+end_date
+date
+否
+查询截止日期
+最大入参时间跨度根据数据更新频率
+确认：
+指标频率（函数11 出参字段
+statistical_frequency）为日度/不定
+期，入参时间跨度需小于1 年；
+周度/旬度，入参时间跨度需小于5
+年；
+月度/季度/半年度/年度，入参时间跨
+度需小于10 年；
+field_names
+str or str list
+否
+字段选择。若为空，默认返回所有字
+段。
+16.3 最小示例
+Python
+
+
+--- Page 58 ---
+result = client.post_data(
+data={
+"indicatorId": "M00100066100000",
+"startDate":"2025-12-31",
+"endDate":"2025-12-31",
+},
+api_path="/dm-quant-func-service/api/v1/edb/data-info/data",
+)
+print(result)
+16.4 输出指标
+出参字段名称
+出参字段类型
+出参字段说明
+indicator_id
+str
+指标ID
+indicator_name
+str
+指标名称
+data_date
+date
+数据日期
+data_value
+decimal
+数据数值
+basic_indicator_unit
+str
+指标单位
+publish_time
+datetime
+公告日期
+data_source
+str
+数据来源
+17. 交易日历
+17.1 函数信息
+•
+函数说明：根据交易场所获取对应交易日历。
+•
+函数path：/dm-quant-func-service/api/v1/market/trade-dates
+•
+数据更新频率：不定期更新
+
+
+--- Page 59 ---
+17.2 入参指标
+参数
+类型
+是否必
+填
+说明
+market_type
+int or
+int list
+是
+交易场所。支持清单传输
+枚举值包含：
+1-银行间市场
+2-交易所市场
+start_date
+date
+是
+查询开始日期
+end_date
+date
+是
+查询截止日期
+•
+开始日期不填，默认往前取一年，结束日
+期不填，默认为当前日期
+•
+开始日期和截止日期均传：获取日期范围
+内的全量数据。可查询时间窗口不超过2 年
+field_names
+str or
+str list
+否
+字段选择。若为空，默认返回所有字段。
+17.3 最小示例
+Python
+result = client.post_data(
+{
+"marketType": ["1"],
+"startDate": "2026-05-01",
+"endDate": "2026-05-18"
+},
+api_path="/dm-quant-func-service/api/v1/market/trade-dates"
+)
+print(result)
+17.4 输出指标
+出参字段名称
+出参字段类型
+出参字段说明
+
+
+--- Page 60 ---
+market_type
+int
+交易场所
+枚举值包含：
+1-银行间市场
+2-交易所市场
+data_date
+date
+交易日期
+四、常见问题与注意事项
+1. 初始化时报`app_key is required`
+原因：
+•
+未显式传入app_key
+•
+也未设置环境变量INNO_APP_KEY
+处理建议：
+•
+检查初始化代码是否传入了app_key
+•
+或确认运行环境中已设置INNO_APP_KEY
+2. 初始化时报`sm4_key is required`
+原因：
+•
+未显式传入sm4_key
+•
+也未设置环境变量INNO_SM4_KEY
+处理建议：
+•
+检查初始化代码是否传入了sm4_key
+•
+或确认运行环境中已设置INNO_SM4_KEY
+3. 请求返回HTTP 非200
+SDK 会抛出HttpStatusError。
+
+
+--- Page 61 ---
+处理建议：
+•
+检查api_path 是否正确
+•
+检查网络连通性、网关权限和证书配置
+4. 返回结果无法解密或不是合法JSON
+SDK 可能抛出：
+•
+CryptoError
+•
+ResponseDecodeError
+处理建议：
+•
+确认sm4_key 是否正确
+•
+确认服务端返回是否为约定的加密响应格式
+•
+确认接口是否已接入正确的网关和环境
+5. 返回`DataFrame` 转换失败
+当return_type="dataframe" 时，SDK 会尝试把返回结果转换为pandas.DataFrame。
+如果接口返回结构不适合表格化处理，可能会报错。
+处理建议：
+•
+确认接口返回是否为列表、data/columns 结构或普通字典
+6. 返回“无订阅套餐”
+该场景表示您暂无函数调用权限。
+处理建议：
+•
+可联系客户经理
+7. 返回“额度已耗尽”/”限流“等提示
+该场景表示您的流量已达上限。
+处理建议：
+
+
+--- Page 62 ---
+•
+可根据field_names 字段筛选业务需要的字段出参
+
+
