@@ -44,7 +44,7 @@ class Config:
         self.dm_intraday_root = (
             Path(root)
             if root is not None
-            else Path(os.getenv("DM_INTRADAY_ROOT", r"E:\dm_intraday"))
+            else Path(os.getenv("DM_INTRADAY_ROOT", r"C:\projects\data_new"))
         )
 
     # ---------- RiceQuant ----------

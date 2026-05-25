@@ -456,7 +456,7 @@ def list_symbols(
     frequency: str = "1m",
     root: str | os.PathLike[str] | None = None,
 ) -> list[str]:
-    base = Path(root) if root is not None else _ROOT
+    base = Path(root) if root is not None else _root()
     asset = _normalize_asset(asset)
     frequency = _normalize_frequency(frequency)
     folder = base / asset / frequency

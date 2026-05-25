@@ -10,7 +10,9 @@ from .api import (
 )
 from .concepts import get_concept_constituents, get_stock_concepts, load_stock_hotconcept
 from .config import Config, get_config
-from . import bond, stock, futures
+from . import bond, stock, futures, wind
+from .stock import update_existing as update_existing_stocks
+from .stock import update_price as update_stock_price
 
 __all__ = [
     "Config",
@@ -29,4 +31,7 @@ __all__ = [
     "parquet_path",
     "set_root",
     "stock",
+    "update_existing_stocks",
+    "update_stock_price",
+    "wind",
 ]
